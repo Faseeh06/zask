@@ -8,8 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { CheckSquare, Eye, EyeOff, Mail, Lock, User, Loader2 } from "lucide-react"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { CheckSquare, Eye, EyeOff, Mail, Lock, User, Loader2, Briefcase, Building } from "lucide-react"
 import { signUp, signInWithGoogle } from "@/lib/auth"
+import { userService, type AppUser } from "@/lib/user-service"
+import ProfileCompletionModal from "@/components/ProfileCompletionModal"
+import { User as FirebaseUser } from "firebase/auth"
 import { toast } from "sonner"
 
 interface SignupPageProps {
@@ -24,8 +28,12 @@ export default function SignupPage({ onSignup, onSwitchToLogin }: SignupPageProp
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [role, setRole] = useState<AppUser['role']>('member')
+  const [department, setDepartment] = useState("")
   const [agreeTerms, setAgreeTerms] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [googleUser, setGoogleUser] = useState<FirebaseUser | null>(null)
+  const [showProfileCompletion, setShowProfileCompletion] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -46,9 +54,15 @@ export default function SignupPage({ onSignup, onSwitchToLogin }: SignupPageProp
       return
     }
 
+    if (!fullName.trim()) {
+      toast.error("Please enter your full name")
+      return
+    }
+
     setIsLoading(true)
 
     try {
+      // Step 1: Create Firebase Auth account
       const { user, error } = await signUp(email, password)
       
       if (error) {
@@ -58,8 +72,22 @@ export default function SignupPage({ onSignup, onSwitchToLogin }: SignupPageProp
       }
 
       if (user) {
-        // Use full name as display name, or extract from email
-        const username = fullName || email.split('@')[0] || email
+        // Step 2: Create user profile in Firestore
+        const { success, error: profileError } = await userService.createUserProfile(user, {
+          name: fullName.trim(),
+          role: role,
+          department: department.trim() || undefined
+        })
+
+        if (!success) {
+          console.error('Failed to create user profile:', profileError)
+          toast.error('Account created but profile setup failed. Please contact support.')
+          setIsLoading(false)
+          return
+        }
+
+        // Use full name as display name
+        const username = fullName.trim()
         
         // Store user info in localStorage
         localStorage.setItem('zask_user', username)
@@ -87,17 +115,41 @@ export default function SignupPage({ onSignup, onSwitchToLogin }: SignupPageProp
       }
 
       if (user) {
-        const username = user.displayName || user.email?.split('@')[0] || 'User'
-        localStorage.setItem('zask_user', username)
-        toast.success('Google signup successful!')
-        onSignup(username)
+        // Check if user profile already exists
+        const { user: existingProfile } = await userService.getUserProfile(user.uid)
+        
+        if (!existingProfile) {
+          // Show profile completion modal for new Google users
+          setGoogleUser(user)
+          setShowProfileCompletion(true)
+          setIsLoading(false)
+        } else {
+          // User already has a profile, proceed with login
+          const username = user.displayName || user.email?.split('@')[0] || 'User'
+          localStorage.setItem('zask_user', username)
+          toast.success('Welcome back!')
+          onSignup(username)
+          setIsLoading(false)
+        }
       }
     } catch (error) {
       toast.error('Google signup failed. Please try again.')
       console.error('Google signup error:', error)
-    } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleProfileCompletion = (success: boolean) => {
+    setShowProfileCompletion(false)
+    
+    if (success && googleUser) {
+      const username = googleUser.displayName || googleUser.email?.split('@')[0] || 'User'
+      localStorage.setItem('zask_user', username)
+      toast.success('Account created successfully!')
+      onSignup(username)
+    }
+    
+    setGoogleUser(null)
   }
 
   return (
@@ -157,6 +209,49 @@ export default function SignupPage({ onSignup, onSwitchToLogin }: SignupPageProp
                     onChange={(e) => setEmail(e.target.value)}
                     className="pl-10 h-12 border-gray-300 focus:border-black focus:ring-black text-base"
                     required
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              {/* Role Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="role" className="text-sm font-medium text-gray-800">
+                  Role
+                </Label>
+                <div className="relative">
+                  <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5 z-10" />
+                  <Select value={role} onValueChange={(value: AppUser['role']) => setRole(value)} disabled={isLoading}>
+                    <SelectTrigger className="pl-10 h-12 border-gray-300 focus:border-black focus:ring-black text-base">
+                      <SelectValue placeholder="Select your role" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="member">Team Member</SelectItem>
+                      <SelectItem value="developer">Developer</SelectItem>
+                      <SelectItem value="designer">Designer</SelectItem>
+                      <SelectItem value="analyst">Analyst</SelectItem>
+                      <SelectItem value="team_lead">Team Lead</SelectItem>
+                      <SelectItem value="project_manager">Project Manager</SelectItem>
+                      <SelectItem value="admin">Administrator</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Department Field */}
+              <div className="space-y-2">
+                <Label htmlFor="department" className="text-sm font-medium text-gray-800">
+                  Department (Optional)
+                </Label>
+                <div className="relative">
+                  <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
+                  <Input
+                    id="department"
+                    type="text"
+                    placeholder="e.g., Engineering, Marketing, Design"
+                    value={department}
+                    onChange={(e) => setDepartment(e.target.value)}
+                    className="pl-10 h-12 border-gray-300 focus:border-black focus:ring-black text-base"
                     disabled={isLoading}
                   />
                 </div>
@@ -329,6 +424,15 @@ export default function SignupPage({ onSignup, onSwitchToLogin }: SignupPageProp
           <p>© 2024 Zask. Streamlining project management worldwide.</p>
         </div>
       </div>
+
+      {/* Profile Completion Modal for Google OAuth users */}
+      {googleUser && (
+        <ProfileCompletionModal
+          user={googleUser}
+          isOpen={showProfileCompletion}
+          onComplete={handleProfileCompletion}
+        />
+      )}
     </div>
   )
 }

@@ -10,6 +10,9 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { CheckSquare, Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react"
 import { signIn, signInWithGoogle } from "@/lib/auth"
+import { userService } from "@/lib/user-service"
+import ProfileCompletionModal from "@/components/ProfileCompletionModal"
+import { User as FirebaseUser } from "firebase/auth"
 import { toast } from "sonner"
 
 interface LoginPageProps {
@@ -23,6 +26,8 @@ export default function LoginPage({ onLogin, onSwitchToSignup }: LoginPageProps)
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [googleUser, setGoogleUser] = useState<FirebaseUser | null>(null)
+  const [showProfileCompletion, setShowProfileCompletion] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,17 +75,41 @@ export default function LoginPage({ onLogin, onSwitchToSignup }: LoginPageProps)
       }
 
       if (user) {
-        const username = user.displayName || user.email?.split('@')[0] || 'User'
-        localStorage.setItem('zask_user', username)
-        toast.success('Google login successful!')
-        onLogin(username)
+        // Check if user profile exists in Firestore
+        const { user: existingProfile } = await userService.getUserProfile(user.uid)
+        
+        if (!existingProfile) {
+          // Show profile completion modal for users without profiles
+          setGoogleUser(user)
+          setShowProfileCompletion(true)
+          setIsLoading(false)
+        } else {
+          // User has a complete profile, proceed with login
+          const username = user.displayName || user.email?.split('@')[0] || 'User'
+          localStorage.setItem('zask_user', username)
+          toast.success('Welcome back!')
+          onLogin(username)
+          setIsLoading(false)
+        }
       }
     } catch (error) {
       toast.error('Google login failed. Please try again.')
       console.error('Google login error:', error)
-    } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleProfileCompletion = (success: boolean) => {
+    setShowProfileCompletion(false)
+    
+    if (success && googleUser) {
+      const username = googleUser.displayName || googleUser.email?.split('@')[0] || 'User'
+      localStorage.setItem('zask_user', username)
+      toast.success('Profile completed! Welcome to Zask!')
+      onLogin(username)
+    }
+    
+    setGoogleUser(null)
   }
 
   return (
@@ -254,6 +283,15 @@ export default function LoginPage({ onLogin, onSwitchToSignup }: LoginPageProps)
           <p>© 2024 Zask. Streamlining project management worldwide.</p>
         </div>
       </div>
+
+      {/* Profile Completion Modal for Google OAuth users */}
+      {googleUser && (
+        <ProfileCompletionModal
+          user={googleUser}
+          isOpen={showProfileCompletion}
+          onComplete={handleProfileCompletion}
+        />
+      )}
     </div>
   )
 }

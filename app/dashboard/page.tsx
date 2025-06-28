@@ -51,8 +51,20 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
+  Clock,
+  Shield,
+  UserCheck,
+  UserX,
+  Wifi,
+  WifiOff,
+  Crown,
+  Star,
+  Circle,
+  AlertCircle,
+  Building,
 } from "lucide-react"
 import { teamService, taskService, donationService, expenseService, institutionService, reportService, notificationService, analyticsService, type TeamMember, type Institution, type Task, type Donation, type Expense, type Report, type Analytics } from "@/lib/firestore"
+import { userService, type AppUser, getUserDisplayName, getRoleDisplayName } from "@/lib/user-service"
 import { institutionServiceEnhanced, analyticsServiceEnhanced, testFirebaseConnection } from "@/lib/firestore-enhanced"
 import { onAuthStateChangeWithDebug, getCurrentUser, isUserAuthenticated } from "@/lib/auth-debug"
 import { Timestamp } from "firebase/firestore"
@@ -73,6 +85,7 @@ export default function Dashboard({ onLogout, onSwitchProject, currentProject, c
   const [donations, setDonations] = useState<Donation[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [reports, setReports] = useState<Report[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [isLoadingData, setIsLoadingData] = useState(true)
   const [connectionTestResult, setConnectionTestResult] = useState<string>("")
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
@@ -134,12 +147,13 @@ export default function Dashboard({ onLogout, onSwitchProject, currentProject, c
         }
 
         // Load other data with original services (fallback)
-        console.log('📝 Loading tasks, donations, expenses...');
-        const [tasksResult, donationsResult, expensesResult, reportsResult] = await Promise.allSettled([
+        console.log('📝 Loading tasks, donations, expenses, team members...');
+        const [tasksResult, donationsResult, expensesResult, reportsResult, teamMembersResult] = await Promise.allSettled([
           taskService.getAll(),
           donationService.getAll(), 
           expenseService.getAll(),
-          reportService.getAll()
+          reportService.getAll(),
+          teamService.getAll()
         ]);
 
         // Handle tasks result
@@ -197,6 +211,20 @@ export default function Dashboard({ onLogout, onSwitchProject, currentProject, c
         } else {
           console.error('Reports promise rejected:', reportsResult.reason);
         }
+
+        // Handle team members result
+        if (teamMembersResult.status === 'fulfilled') {
+          const { members: teamMembersData, error: teamMembersError } = teamMembersResult.value;
+          if (teamMembersError) {
+            console.error('Team members error:', teamMembersError);
+            toast.error(`Team members error: ${teamMembersError}`);
+          } else {
+            setTeamMembers(teamMembersData);
+            console.log(`✅ Loaded ${teamMembersData.length} team members`);
+          }
+        } else {
+          console.error('Team members promise rejected:', teamMembersResult.reason);
+        }
         
         console.log('✅ Dashboard data loading completed')
         toast.success('Dashboard data loaded successfully!')
@@ -231,6 +259,7 @@ export default function Dashboard({ onLogout, onSwitchProject, currentProject, c
     let unsubscribeDonations = () => {};
     let unsubscribeExpenses = () => {};
     let unsubscribeReports = () => {};
+    let unsubscribeTeamMembers = () => {};
 
     if (isUserAuthenticated()) {
       try {
@@ -239,6 +268,7 @@ export default function Dashboard({ onLogout, onSwitchProject, currentProject, c
         unsubscribeDonations = donationService.listen(setDonations);
         unsubscribeExpenses = expenseService.listen(setExpenses);
         unsubscribeReports = reportService.listen(setReports);
+        unsubscribeTeamMembers = teamService.listen(setTeamMembers);
         console.log('👂 Real-time listeners set up successfully');
       } catch (error) {
         console.error('❌ Failed to set up real-time listeners:', error);
@@ -252,6 +282,7 @@ export default function Dashboard({ onLogout, onSwitchProject, currentProject, c
       unsubscribeDonations();
       unsubscribeExpenses();
       unsubscribeReports();
+      unsubscribeTeamMembers();
       console.log('🧹 Dashboard cleanup completed');
     }
   }, [currentProject])
@@ -262,7 +293,7 @@ export default function Dashboard({ onLogout, onSwitchProject, currentProject, c
         <div className="flex flex-col items-center justify-center h-64 space-y-4">
           <Loader2 className="w-8 h-8 animate-spin" />
           <span className="ml-2">Loading dashboard data...</span>
-          <Button 
+          <Button
             onClick={handleTestConnection}
             variant="outline"
             className="mt-4"
@@ -278,7 +309,7 @@ export default function Dashboard({ onLogout, onSwitchProject, currentProject, c
 
     switch (activeTab) {
       case "dashboard":
-        return <DashboardContent analytics={analytics} />
+        return <DashboardContent analytics={analytics} teamMembers={teamMembers} setActiveTab={setActiveTab} />
       case "orphanages":
         return <OrphanagesContent institutions={institutions} />
       case "tasks":
@@ -292,215 +323,200 @@ export default function Dashboard({ onLogout, onSwitchProject, currentProject, c
       case "notifications":
         return <NotificationsContent />
       default:
-        return <DashboardContent analytics={analytics} />
+        return <DashboardContent analytics={analytics} teamMembers={teamMembers} setActiveTab={setActiveTab} />
     }
   }
 
   return (
     <div className="min-h-screen bg-[#f5f8f3]">
-      {/* Enhanced sidebar with 0.7% spacing and toggle */}
+      {/* Enhanced sidebar with smooth animations */}
       <div 
-        className={`fixed z-50 bg-black shadow-xl rounded-lg transition-all duration-300 ${
+        className={`fixed z-50 bg-black shadow-xl rounded-lg transition-all duration-500 ease-in-out transform hover:shadow-2xl animate-slideInLeft ${
           isSidebarCollapsed ? 'w-16' : 'w-64'
         }`}
         style={{
           left: '0.7%',
           top: '0.7%',
-          height: '98.6%'
+          height: '98.6%',
+          background: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)'
         }}
       >
         <div className="flex h-full flex-col">
-          {/* Header with toggle button */}
+          {/* Header with animated toggle button */}
           <div className="flex h-16 shrink-0 items-center justify-between border-b border-gray-700 px-4">
-            {!isSidebarCollapsed && (
-              <h1 className="text-xl font-bold text-[#f5f8f3]">Zask Dashboard</h1>
-            )}
-            <Button
+            <div className={`transition-all duration-500 ease-in-out ${
+              isSidebarCollapsed ? 'opacity-0 w-0 scale-75' : 'opacity-100 w-auto scale-100'
+            }`}>
+              <h1 className="text-xl font-bold text-[#f5f8f3] whitespace-nowrap">Zask Dashboard</h1>
+            </div>
+          <Button
               variant="ghost"
               size="sm"
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="text-[#f5f8f3] hover:bg-gray-800 p-2"
+              className="text-[#f5f8f3] hover:bg-gray-800 hover:scale-110 transition-all duration-300 ease-in-out p-2 rounded-full"
             >
-              {isSidebarCollapsed ? (
+              <div className={`transition-transform duration-300 ease-in-out ${
+                isSidebarCollapsed ? 'rotate-0' : 'rotate-180'
+              }`}>
                 <ChevronRight className="h-4 w-4" />
-              ) : (
-                <ChevronLeft className="h-4 w-4" />
-              )}
-            </Button>
+              </div>
+          </Button>
           </div>
-          <nav className={`flex-1 space-y-1 py-4 ${isSidebarCollapsed ? 'px-2' : 'px-4'}`}>
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={`flex w-full items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'} rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                activeTab === "dashboard"
-                  ? "bg-[#f5f8f3] text-black"
-                  : "text-[#f5f8f3] hover:bg-gray-800"
-              }`}
-              title={isSidebarCollapsed ? "Dashboard" : ""}
-            >
-              <Sparkles className="h-4 w-4" />
-              {!isSidebarCollapsed && "Dashboard"}
-            </button>
-            <button
-              onClick={() => setActiveTab("orphanages")}
-              className={`flex w-full items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'} rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                activeTab === "orphanages"
-                  ? "bg-[#f5f8f3] text-black"
-                  : "text-[#f5f8f3] hover:bg-gray-800"
-              }`}
-              title={isSidebarCollapsed ? "Institutions" : ""}
-            >
-              <School className="h-4 w-4" />
-              {!isSidebarCollapsed && "Institutions"}
-            </button>
-            <button
-              onClick={() => setActiveTab("tasks")}
-              className={`flex w-full items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'} rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                activeTab === "tasks"
-                  ? "bg-[#f5f8f3] text-black"
-                  : "text-[#f5f8f3] hover:bg-gray-800"
-              }`}
-              title={isSidebarCollapsed ? "Tasks" : ""}
-            >
-              <CheckSquare className="h-4 w-4" />
-              {!isSidebarCollapsed && "Tasks"}
-            </button>
-            <button
-              onClick={() => setActiveTab("users")}
-              className={`flex w-full items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'} rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                activeTab === "users"
-                  ? "bg-[#f5f8f3] text-black"
-                  : "text-[#f5f8f3] hover:bg-gray-800"
-              }`}
-              title={isSidebarCollapsed ? "Team" : ""}
-            >
-              <Users className="h-4 w-4" />
-              {!isSidebarCollapsed && "Team"}
-            </button>
-            <button
-              onClick={() => setActiveTab("finances")}
-              className={`flex w-full items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'} rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                activeTab === "finances"
-                  ? "bg-[#f5f8f3] text-black"
-                  : "text-[#f5f8f3] hover:bg-gray-800"
-              }`}
-              title={isSidebarCollapsed ? "Finances" : ""}
-            >
-              <DollarSign className="h-4 w-4" />
-              {!isSidebarCollapsed && "Finances"}
-            </button>
-            <button
-              onClick={() => setActiveTab("reports")}
-              className={`flex w-full items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'} rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                activeTab === "reports"
-                  ? "bg-[#f5f8f3] text-black"
-                  : "text-[#f5f8f3] hover:bg-gray-800"
-              }`}
-              title={isSidebarCollapsed ? "Reports" : ""}
-            >
-              <FileText className="h-4 w-4" />
-              {!isSidebarCollapsed && "Reports"}
-            </button>
-            <button
-              onClick={() => setActiveTab("notifications")}
-              className={`flex w-full items-center ${isSidebarCollapsed ? 'justify-center' : 'gap-3'} rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                activeTab === "notifications"
-                  ? "bg-[#f5f8f3] text-black"
-                  : "text-[#f5f8f3] hover:bg-gray-800"
-              }`}
-              title={isSidebarCollapsed ? "Notifications" : ""}
-            >
-              <Bell className="h-4 w-4" />
-              {!isSidebarCollapsed && "Notifications"}
-            </button>
+          <nav className={`flex-1 space-y-1 py-4 transition-all duration-300 ${isSidebarCollapsed ? 'px-2' : 'px-4'}`}>
+            {[
+              { id: "dashboard", icon: Sparkles, label: "Dashboard", delay: "0ms" },
+              { id: "orphanages", icon: School, label: "Institutions", delay: "50ms" },
+              { id: "tasks", icon: CheckSquare, label: "Tasks", delay: "100ms" },
+              { id: "users", icon: Users, label: "Team", delay: "150ms" },
+              { id: "finances", icon: DollarSign, label: "Finances", delay: "200ms" },
+              { id: "reports", icon: FileText, label: "Reports", delay: "250ms" },
+              { id: "notifications", icon: Bell, label: "Notifications", delay: "300ms" }
+            ].map(({ id, icon: Icon, label, delay }) => (
+              <button
+                key={id}
+                onClick={() => setActiveTab(id)}
+                className={`group relative flex w-full items-center ${
+                  isSidebarCollapsed ? 'justify-center' : 'gap-3'
+                } rounded-lg px-3 py-2 text-sm font-medium transition-all duration-300 ease-in-out hover:scale-105 hover:shadow-lg ${
+                  activeTab === id
+                    ? "bg-[#f5f8f3] text-black shadow-md"
+                    : "text-[#f5f8f3] hover:bg-gray-800"
+                }`}
+                style={{ transitionDelay: delay }}
+                title={isSidebarCollapsed ? label : ""}
+              >
+                <Icon className={`h-4 w-4 transition-all duration-300 ${
+                  activeTab === id ? 'scale-110' : 'group-hover:scale-110'
+                }`} />
+                <span className={`transition-all duration-500 ease-in-out ${
+                  isSidebarCollapsed 
+                    ? 'opacity-0 w-0 translate-x-2' 
+                    : 'opacity-100 w-auto translate-x-0'
+                }`}>
+                  {label}
+                </span>
+                {/* Active indicator */}
+                {activeTab === id && (
+                  <div className="absolute right-1 w-1 h-6 bg-black rounded-full transition-all duration-300" />
+                )}
+                {/* Hover glow effect */}
+                <div className={`absolute inset-0 rounded-lg transition-all duration-300 ${
+                  activeTab === id 
+                    ? 'bg-gradient-to-r from-emerald-500/20 to-blue-500/20' 
+                    : 'bg-gradient-to-r from-emerald-500/0 to-blue-500/0 group-hover:from-emerald-500/10 group-hover:to-blue-500/10'
+                }`} />
+              </button>
+            ))}
           </nav>
 
-          <div className={`flex flex-col gap-2 p-4 border-t border-gray-700 ${isSidebarCollapsed ? 'items-center' : ''}`}>
-            {!isSidebarCollapsed ? (
-              <>
-                <div className="flex items-center gap-3 text-sm text-gray-300">
-                  <div className="h-8 w-8 rounded-full bg-[#f5f8f3] flex items-center justify-center">
-                    <span className="text-black font-medium">
-                      {currentUser?.charAt(0).toUpperCase() || 'U'}
-                    </span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate font-medium">{currentUser || 'User'}</p>
-                    <p className="text-xs text-gray-400">Project: {currentProject || 'None'}</p>
-                  </div>
-                </div>
-                
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onSwitchProject}
-                    className="flex-1 h-8 text-xs text-gray-300 hover:text-white hover:bg-gray-800"
-                  >
-                    <ArrowLeftRight className="h-3 w-3 mr-1" />
-                    Switch
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 text-xs text-gray-300 hover:text-white hover:bg-gray-800"
-                  >
-                    <Settings className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onLogout}
-                    className="h-8 text-xs text-gray-300 hover:text-white hover:bg-gray-800"
-                  >
-                    <LogOut className="h-3 w-3" />
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <div className="h-8 w-8 rounded-full bg-[#f5f8f3] flex items-center justify-center mx-auto">
-                  <span className="text-black font-medium text-xs">
+          <div className={`flex flex-col gap-2 p-4 border-t border-gray-700 transition-all duration-500 ${isSidebarCollapsed ? 'items-center' : ''}`}>
+            <div className={`transition-all duration-500 ease-in-out ${
+              isSidebarCollapsed ? 'opacity-0 scale-75 h-0' : 'opacity-100 scale-100 h-auto'
+            }`}>
+              <div className="flex items-center gap-3 text-sm text-gray-300">
+                <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#f5f8f3] to-emerald-200 flex items-center justify-center transition-all duration-300 hover:scale-110 shadow-sm">
+                  <span className="text-black font-medium">
                     {currentUser?.charAt(0).toUpperCase() || 'U'}
                   </span>
                 </div>
+                <div className="flex-1 min-w-0">
+                  <p className="truncate font-medium transition-colors duration-200 hover:text-white">{currentUser || 'User'}</p>
+                  <p className="text-xs text-gray-400 transition-colors duration-200">Project: {currentProject || 'None'}</p>
+                </div>
+              </div>
+            </div>
+            
+                        {/* Expanded buttons */}
+            <div className={`transition-all duration-500 ease-in-out ${
+              isSidebarCollapsed ? 'opacity-0 scale-75 h-0 overflow-hidden' : 'opacity-100 scale-100 h-auto'
+            }`}>
+              <div className="space-y-2">
+                {/* Top row buttons */}
+                <div className="flex gap-2">
+                  {[
+                    { icon: ArrowLeftRight, label: "Switch", onClick: onSwitchProject, delay: "0ms" },
+                    { icon: Settings, label: "Settings", onClick: () => {}, delay: "50ms" }
+                  ].map(({ icon: Icon, label, onClick, delay }) => (
+                    <Button
+                      key={label}
+                      variant="ghost"
+                      size="sm"
+                      onClick={onClick}
+                      className="flex-1 h-8 text-xs text-gray-300 hover:text-white hover:bg-gray-800 hover:scale-105 transition-all duration-300 ease-in-out rounded-lg"
+                      style={{ transitionDelay: delay }}
+                    >
+                      <Icon className="h-3 w-3 mr-1 transition-transform duration-200 hover:rotate-12" />
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+                
+                {/* Logout button on separate line */}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onLogout}
+                  className="w-full h-8 text-xs text-red-300 hover:text-red-100 hover:bg-red-900/30 hover:scale-105 transition-all duration-300 ease-in-out rounded-lg border border-red-800/20 hover:border-red-600/40"
+                  style={{ transitionDelay: "100ms" }}
+                >
+                  <LogOut className="h-3 w-3 mr-1 transition-transform duration-200 hover:rotate-12" />
+                  Logout
+                </Button>
+              </div>
+            </div>
+
+                        {/* Collapsed state */}
+            <div className={`transition-all duration-500 ease-in-out ${
+              isSidebarCollapsed ? 'opacity-100 scale-100' : 'opacity-0 scale-75 h-0 overflow-hidden'
+            }`}>
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#f5f8f3] to-emerald-200 flex items-center justify-center mx-auto transition-all duration-300 hover:scale-110 shadow-sm mb-2">
+                <span className="text-black font-medium text-xs">
+                  {currentUser?.charAt(0).toUpperCase() || 'U'}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                {/* Top buttons */}
                 <div className="flex flex-col gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onSwitchProject}
-                    className="h-8 w-8 p-0 text-gray-300 hover:text-white hover:bg-gray-800"
-                    title="Switch Project"
-                  >
-                    <ArrowLeftRight className="h-3 w-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 text-gray-300 hover:text-white hover:bg-gray-800"
-                    title="Settings"
-                  >
-                    <Settings className="h-3 w-3" />
-                  </Button>
+                  {[
+                    { icon: ArrowLeftRight, title: "Switch Project", onClick: onSwitchProject, delay: "0ms" },
+                    { icon: Settings, title: "Settings", onClick: () => {}, delay: "50ms" }
+                  ].map(({ icon: Icon, title, onClick, delay }) => (
+                    <Button
+                      key={title}
+                      variant="ghost"
+                      size="sm"
+                      onClick={onClick}
+                      className="h-8 w-8 p-0 text-gray-300 hover:text-white hover:bg-gray-800 hover:scale-110 transition-all duration-300 ease-in-out rounded-lg"
+                      style={{ transitionDelay: delay }}
+                      title={title}
+                    >
+                      <Icon className="h-3 w-3 transition-transform duration-200 hover:rotate-12" />
+                    </Button>
+                  ))}
+                </div>
+                
+                {/* Logout button separated */}
+                <div className="mt-1 pt-1 border-t border-gray-700/50">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={onLogout}
-                    className="h-8 w-8 p-0 text-gray-300 hover:text-white hover:bg-gray-800"
+                    className="h-8 w-8 p-0 text-red-300 hover:text-red-100 hover:bg-red-900/30 hover:scale-110 transition-all duration-300 ease-in-out rounded-lg border border-red-800/20 hover:border-red-600/40"
+                    style={{ transitionDelay: "100ms" }}
                     title="Logout"
                   >
-                    <LogOut className="h-3 w-3" />
+                    <LogOut className="h-3 w-3 transition-transform duration-200 hover:rotate-12" />
                   </Button>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Main content with smooth animations */}
       <div 
-        className="transition-all duration-300"
+        className="transition-all duration-500 ease-in-out"
         style={{
           marginLeft: isSidebarCollapsed ? 'calc(0.7% + 4rem + 1rem)' : 'calc(0.7% + 16rem + 1rem)',
           marginRight: '0.7%',
@@ -508,20 +524,22 @@ export default function Dashboard({ onLogout, onSwitchProject, currentProject, c
           marginBottom: '0.7%'
         }}
       >
-        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8 rounded-t-lg">
+        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8 rounded-t-lg transition-all duration-300 hover:shadow-md backdrop-blur-sm">
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
             <div className="flex items-center gap-x-4 lg:gap-x-6">
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 bg-green-500 rounded-full"></div>
-                <span className="text-sm text-gray-600">Live Data</span>
-              </div>
+              <div className="flex items-center gap-2 group">
+                <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse group-hover:scale-125 transition-transform duration-300"></div>
+                <span className="text-sm text-gray-600 group-hover:text-gray-800 transition-colors duration-200">Live Data</span>
+                </div>
             </div>
-          </div>
         </div>
+      </div>
 
-        <main className="py-10 bg-white rounded-b-lg shadow-sm">
-          <div className="px-4 sm:px-6 lg:px-8">
-            {renderContent()}
+        <main className="py-10 bg-white rounded-b-lg shadow-sm transition-all duration-300 hover:shadow-lg">
+          <div className="px-4 sm:px-6 lg:px-8 transition-all duration-300">
+            <div className="animate-fadeIn">
+              {renderContent()}
+        </div>
           </div>
         </main>
       </div>
@@ -530,13 +548,13 @@ export default function Dashboard({ onLogout, onSwitchProject, currentProject, c
 }
 
 // Enhanced DashboardContent with real analytics
-function DashboardContent({ analytics }: { analytics: Analytics | null }) {
+function DashboardContent({ analytics, teamMembers, setActiveTab }: { analytics: Analytics | null; teamMembers: TeamMember[]; setActiveTab: (tab: string) => void }) {
   if (!analytics) {
-    return (
+  return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="w-6 h-6 animate-spin" />
         <span className="ml-2">Loading analytics...</span>
-      </div>
+          </div>
     )
   }
 
@@ -545,7 +563,7 @@ function DashboardContent({ analytics }: { analytics: Analytics | null }) {
       <div>
         <h2 className="text-5xl font-bold text-gray-900 font-ephesis">Analytics Overview</h2>
         <p className="text-lg text-gray-600 mt-2 font-poiret-one">Real-time insights from your Zask projects</p>
-      </div>
+            </div>
       
       {/* Overview Cards with real data */}
       <div className="grid lg:grid-cols-4 gap-6">
@@ -561,7 +579,7 @@ function DashboardContent({ analytics }: { analytics: Analytics | null }) {
             <p className="text-sm text-blue-600 mt-1">{analytics.taskCompletionRate.toFixed(1)}% completion rate</p>
           </CardContent>
         </Card>
-        
+
         <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
           <CardHeader>
             <CardTitle className="text-green-800 flex items-center gap-2">
@@ -574,7 +592,7 @@ function DashboardContent({ analytics }: { analytics: Analytics | null }) {
             <p className="text-sm text-green-600 mt-1">{analytics.totalDonations} donations received</p>
           </CardContent>
         </Card>
-        
+
         <Card className="bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200">
           <CardHeader>
             <CardTitle className="text-purple-800 flex items-center gap-2">
@@ -587,7 +605,7 @@ function DashboardContent({ analytics }: { analytics: Analytics | null }) {
             <p className="text-sm text-purple-600 mt-1">{analytics.activeInstitutions} active</p>
           </CardContent>
         </Card>
-        
+
         <Card className="bg-gradient-to-br from-orange-50 to-red-50 border-orange-200">
           <CardHeader>
             <CardTitle className="text-orange-800 flex items-center gap-2">
@@ -596,8 +614,63 @@ function DashboardContent({ analytics }: { analytics: Analytics | null }) {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold text-orange-600">{analytics.totalTeamMembers}</p>
-            <p className="text-sm text-orange-600 mt-1">{analytics.activeTeamMembers} active</p>
+            <p className="text-3xl font-bold text-orange-600">{teamMembers.length}</p>
+            <p className="text-sm text-orange-600 mt-1">{teamMembers.filter(m => m.status === 'active').length} active</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Team Status Overview */}
+      <div className="grid lg:grid-cols-4 gap-6 mb-6">
+        <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+          <CardHeader>
+            <CardTitle className="text-green-800 flex items-center gap-2">
+              <Wifi className="w-5 h-5" />
+              Online Members
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-green-600">{teamMembers.filter(m => m.status === 'active').length}</p>
+            <p className="text-sm text-green-600 mt-1">Currently active</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-yellow-50 to-orange-50 border-yellow-200">
+          <CardHeader>
+            <CardTitle className="text-yellow-800 flex items-center gap-2">
+              <Clock className="w-5 h-5" />
+              Away Members
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-yellow-600">{teamMembers.filter(m => m.status === 'away').length}</p>
+            <p className="text-sm text-yellow-600 mt-1">Currently away</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-gray-50 to-slate-50 border-gray-200">
+          <CardHeader>
+            <CardTitle className="text-gray-800 flex items-center gap-2">
+              <WifiOff className="w-5 h-5" />
+              Offline Members
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-gray-600">{teamMembers.filter(m => m.status === 'offline').length}</p>
+            <p className="text-sm text-gray-600 mt-1">Currently offline</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200">
+          <CardHeader>
+            <CardTitle className="text-purple-800 flex items-center gap-2">
+              <Shield className="w-5 h-5" />
+              Leadership
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold text-purple-600">{teamMembers.filter(m => ['admin', 'manager', 'lead'].includes(m.permissions)).length}</p>
+            <p className="text-sm text-purple-600 mt-1">Admins & leads</p>
           </CardContent>
         </Card>
       </div>
@@ -612,7 +685,7 @@ function DashboardContent({ analytics }: { analytics: Analytics | null }) {
             <div className="flex justify-between">
               <span className="text-gray-600">Total Donations:</span>
               <span className="font-bold text-green-600">PKR {analytics.totalDonationAmount.toLocaleString()}</span>
-            </div>
+              </div>
             <div className="flex justify-between">
               <span className="text-gray-600">Total Expenses:</span>
               <span className="font-bold text-red-600">PKR {analytics.totalExpenseAmount.toLocaleString()}</span>
@@ -641,7 +714,7 @@ function DashboardContent({ analytics }: { analytics: Analytics | null }) {
                   className="bg-green-600 h-2 rounded-full" 
                   style={{width: `${analytics.taskCompletionRate}%`}}
                 ></div>
-              </div>
+            </div>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center text-sm">
               <div>
@@ -651,7 +724,7 @@ function DashboardContent({ analytics }: { analytics: Analytics | null }) {
               <div>
                 <p className="font-bold text-blue-600">{analytics.inProgressTasks}</p>
                 <p className="text-gray-600">In Progress</p>
-              </div>
+            </div>
               <div>
                 <p className="font-bold text-green-600">{analytics.completedTasks}</p>
                 <p className="text-gray-600">Completed</p>
@@ -674,6 +747,66 @@ function DashboardContent({ analytics }: { analytics: Analytics | null }) {
           </CardContent>
         </Card>
       </div>
+
+      {/* Team Members Quick View */}
+      {teamMembers.length > 0 && (
+        <div className="mt-8">
+          <h3 className="text-2xl font-bold text-gray-900 mb-4">Team Members</h3>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {teamMembers.slice(0, 6).map((member) => (
+              <Card key={member.id} className="bg-white border-gray-300 hover:shadow-md transition-shadow">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src="" />
+                        <AvatarFallback className="bg-gradient-to-br from-blue-100 to-purple-100 text-blue-700 font-medium">
+                          {member.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white ${
+                        member.status === 'active' ? 'bg-green-500' :
+                        member.status === 'away' ? 'bg-yellow-500' : 'bg-gray-400'
+                      }`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900 truncate">{member.fullName}</p>
+                        <div className="text-gray-400">
+                          {member.permissions === 'admin' && <Crown className="w-3 h-3" />}
+                          {member.permissions === 'manager' && <Shield className="w-3 h-3" />}
+                          {member.permissions === 'lead' && <Star className="w-3 h-3" />}
+                          {member.permissions === 'member' && <Users className="w-3 h-3" />}
+                        </div>
+                      </div>
+                      <p className="text-sm text-gray-500 truncate">{member.role}</p>
+                      <div className="flex items-center gap-1 mt-1">
+                        <div className={`w-2 h-2 rounded-full ${
+                          member.status === 'active' ? 'bg-green-500' :
+                          member.status === 'away' ? 'bg-yellow-500' : 'bg-gray-400'
+                        }`} />
+                        <span className="text-xs text-gray-500 capitalize">{member.status}</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          {teamMembers.length > 6 && (
+            <div className="text-center mt-4">
+              <p className="text-gray-600 mb-2">Showing 6 of {teamMembers.length} team members</p>
+              <Button 
+                variant="outline" 
+                onClick={() => setActiveTab('users')}
+                className="text-gray-600 hover:text-gray-900"
+              >
+                View All Team Members →
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -687,9 +820,9 @@ function OrphanagesContent({ institutions }: { institutions: Institution[] }) {
           <h2 className="text-5xl font-bold text-gray-900 font-ephesis">Institutions</h2>
           <p className="text-lg text-gray-600 mt-2 font-poiret-one">Manage partner orphanages and schools</p>
         </div>
-        <Button className="bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-12 px-6">
-          <Plus className="w-5 h-5 mr-2" />
-          Add Institution
+            <Button className="bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-12 px-6">
+              <Plus className="w-5 h-5 mr-2" />
+              Add Institution
         </Button>
       </div>
       
@@ -865,7 +998,7 @@ function ReportsContent({ reports, analytics }: { reports: Report[]; analytics: 
                       <SelectItem value="json">JSON</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
+              </div>
                 <div>
                   <Label htmlFor="startDate">Start Date</Label>
                   <Input
@@ -879,7 +1012,7 @@ function ReportsContent({ reports, analytics }: { reports: Report[]; analytics: 
                     required
                     disabled={isGeneratingReport}
                   />
-                </div>
+              </div>
                 <div>
                   <Label htmlFor="endDate">End Date</Label>
                   <Input
@@ -894,7 +1027,7 @@ function ReportsContent({ reports, analytics }: { reports: Report[]; analytics: 
                     disabled={isGeneratingReport}
                   />
                 </div>
-              </div>
+                </div>
               <div className="flex gap-2">
                 <Button 
                   type="submit" 
@@ -922,7 +1055,7 @@ function ReportsContent({ reports, analytics }: { reports: Report[]; analytics: 
             </form>
           </DialogContent>
         </Dialog>
-      </div>
+                </div>
 
       {/* Generated Reports List */}
       <div className="grid gap-6">
@@ -935,7 +1068,7 @@ function ReportsContent({ reports, analytics }: { reports: Report[]; analytics: 
               <div className="text-center py-8">
                 <FileText className="w-12 h-12 mx-auto text-gray-400 mb-4" />
                 <p className="text-gray-500">No reports generated yet. Create your first report to get started.</p>
-              </div>
+                </div>
             ) : (
               <div className="space-y-4">
                 {reports.map((report) => (
@@ -952,18 +1085,18 @@ function ReportsContent({ reports, analytics }: { reports: Report[]; analytics: 
                         }>
                           {report.status}
                         </Badge>
-                      </div>
-                    </div>
+              </div>
+              </div>
                     <div className="flex items-center gap-2">
                       <Button variant="outline" size="sm">
                         <FileText className="w-4 h-4 mr-1" />
                         View
-                      </Button>
+              </Button>
                       <Button variant="outline" size="sm">
                         Download
-                      </Button>
-                    </div>
-                  </div>
+              </Button>
+            </div>
+      </div>
                 ))}
               </div>
             )}
@@ -975,282 +1108,321 @@ function ReportsContent({ reports, analytics }: { reports: Report[]; analytics: 
 }
 
 function UsersContent() {
-  const [members, setMembers] = useState<TeamMember[]>([])
+  const [users, setUsers] = useState<AppUser[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [isAddingMember, setIsAddingMember] = useState(false)
-  const [showAddForm, setShowAddForm] = useState(false)
-  const [newMember, setNewMember] = useState({
-    fullName: '',
-    email: '',
-    role: '',
-    department: '',
-    permissions: 'member' as 'admin' | 'lead' | 'manager' | 'member'
-  })
 
-  // Load team members
+  // Load users and set up real-time listener
   useEffect(() => {
-    loadMembers()
+    loadUsers()
+    
+    // Set up real-time listener for users
+    const unsubscribe = userService.listenToUsers((updatedUsers) => {
+      setUsers(updatedUsers)
+      setIsLoading(false)
+    })
+
+    return () => unsubscribe()
   }, [])
 
-  const loadMembers = async () => {
-    const { members: fetchedMembers, error } = await teamService.getAll()
+  const loadUsers = async () => {
+    const { users: fetchedUsers, error } = await userService.getAllUsers()
     if (error) {
-      toast.error('Failed to load team members')
+      toast.error(`Failed to load users: ${error}`)
     } else {
-      setMembers(fetchedMembers)
+      setUsers(fetchedUsers)
     }
     setIsLoading(false)
   }
 
-  const handleAddMember = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsAddingMember(true)
-
-    const memberData = {
-      ...newMember,
-      status: 'active' as const
-    }
-
-    const { error } = await teamService.create(memberData)
+  const handleUpdateUserStatus = async (userId: string, newStatus: AppUser['status']) => {
+    const { success, error } = await userService.updateUserStatus(userId, newStatus)
     
     if (error) {
-      toast.error('Failed to add team member')
+      toast.error('Failed to update user status')
     } else {
-      toast.success('Team member added successfully!')
-      setNewMember({
-        fullName: '',
-        email: '',
-        role: '',
-        department: '',
-        permissions: 'member'
-      })
-      setShowAddForm(false)
-      loadMembers() // Refresh the list
+      toast.success('User status updated!')
     }
-    setIsAddingMember(false)
   }
 
-  const handleDeleteMember = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to remove ${name} from the team?`)) return
-    
-    const { error } = await teamService.delete(id)
-    if (error) {
-      toast.error('Failed to remove team member')
-    } else {
-      toast.success('Team member removed successfully')
-      loadMembers()
+  const getStatusIcon = (status: AppUser['status']) => {
+    switch (status) {
+      case 'active': return <Wifi className="w-3 h-3 text-green-500" />
+      case 'away': return <Clock className="w-3 h-3 text-yellow-500" />
+      case 'busy': return <AlertCircle className="w-3 h-3 text-red-500" />
+      case 'inactive': return <WifiOff className="w-3 h-3 text-gray-400" />
+      default: return <Circle className="w-3 h-3 text-gray-400" />
     }
   }
+
+  const getRoleIcon = (role: AppUser['role']) => {
+    switch (role) {
+      case 'admin': return <Crown className="w-4 h-4 text-purple-500" />
+      case 'project_manager': return <Shield className="w-4 h-4 text-blue-500" />
+      case 'team_lead': return <Star className="w-4 h-4 text-indigo-500" />
+      case 'developer': return <Users className="w-4 h-4 text-green-500" />
+      case 'designer': return <Sparkles className="w-4 h-4 text-pink-500" />
+      case 'analyst': return <Target className="w-4 h-4 text-orange-500" />
+      default: return <Users className="w-4 h-4 text-gray-500" />
+    }
+  }
+
+  const formatLastActive = (lastActive?: Timestamp) => {
+    if (!lastActive) return 'Never'
+    try {
+      const now = new Date()
+      const lastActiveDate = lastActive.toDate()
+      const diffInMinutes = Math.floor((now.getTime() - lastActiveDate.getTime()) / (1000 * 60))
+      
+      if (diffInMinutes < 1) return 'Just now'
+      if (diffInMinutes < 60) return `${diffInMinutes}m ago`
+      if (diffInMinutes < 1440) return `${Math.floor(diffInMinutes / 60)}h ago`
+      return `${Math.floor(diffInMinutes / 1440)}d ago`
+    } catch {
+      return 'Unknown'
+    }
+  }
+
+  const getInitials = (name: string) => {
+    return name
+      .split(' ')
+      .map(word => word[0])
+      .join('')
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
+  const activeUsers = users.filter(u => u.status === 'active')
+  const awayUsers = users.filter(u => u.status === 'away')
+  const busyUsers = users.filter(u => u.status === 'busy')
+  const inactiveUsers = users.filter(u => u.status === 'inactive')
 
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-3xl font-bold text-black">Team Members</h2>
-          <p className="text-gray-600 mt-2">Manage team members and permissions</p>
+          <h2 className="text-5xl font-bold text-gray-900 font-ephesis">Team Members</h2>
+          <p className="text-lg text-gray-600 mt-2 font-poiret-one">View registered users, their roles, and assigned tasks</p>
+          <div className="flex items-center gap-4 mt-3">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span className="text-sm text-gray-600">{activeUsers.length} active</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+              <span className="text-sm text-gray-600">{awayUsers.length} away</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+              <span className="text-sm text-gray-600">{busyUsers.length} busy</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+              <span className="text-sm text-gray-600">{inactiveUsers.length} inactive</span>
+            </div>
+          </div>
         </div>
-        <Button 
-          className="bg-black hover:bg-gray-800 text-[#f5f8f3]"
-          onClick={() => setShowAddForm(true)}
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Invite Member
-        </Button>
+        <div className="text-sm text-gray-500">
+          Users are created when they sign up
+        </div>
       </div>
-
-      {/* Add Member Form */}
-      {showAddForm && (
-        <Card className="bg-white border-gray-300">
-          <CardHeader>
-            <CardTitle className="text-black">Add New Team Member</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleAddMember} className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input
-                    id="fullName"
-                    value={newMember.fullName}
-                    onChange={(e) => setNewMember(prev => ({...prev, fullName: e.target.value}))}
-                    placeholder="Enter full name"
-                    required
-                    disabled={isAddingMember}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={newMember.email}
-                    onChange={(e) => setNewMember(prev => ({...prev, email: e.target.value}))}
-                    placeholder="Enter email address"
-                    required
-                    disabled={isAddingMember}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="role">Role</Label>
-                  <Input
-                    id="role"
-                    value={newMember.role}
-                    onChange={(e) => setNewMember(prev => ({...prev, role: e.target.value}))}
-                    placeholder="e.g., Frontend Developer"
-                    required
-                    disabled={isAddingMember}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="department">Department</Label>
-                  <Input
-                    id="department"
-                    value={newMember.department}
-                    onChange={(e) => setNewMember(prev => ({...prev, department: e.target.value}))}
-                    placeholder="e.g., Engineering"
-                    required
-                    disabled={isAddingMember}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="permissions">Permissions</Label>
-                  <select
-                    id="permissions"
-                    value={newMember.permissions}
-                    onChange={(e) => setNewMember(prev => ({...prev, permissions: e.target.value as 'admin' | 'lead' | 'manager' | 'member'}))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    disabled={isAddingMember}
-                  >
-                    <option value="member">Member</option>
-                    <option value="lead">Lead</option>
-                    <option value="manager">Manager</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button 
-                  type="submit" 
-                  className="bg-black hover:bg-gray-800 text-[#f5f8f3]"
-                  disabled={isAddingMember}
-                >
-                  {isAddingMember ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Adding...
-                    </>
-                  ) : (
-                    'Add Member'
-                  )}
-                </Button>
-                <Button 
-                  type="button" 
-                  variant="outline"
-                  onClick={() => setShowAddForm(false)}
-                  disabled={isAddingMember}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
 
       {isLoading ? (
         <div className="flex justify-center py-8">
-          <Loader2 className="w-8 h-8 animate-spin text-black" />
+          <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
         </div>
+      ) : users.length === 0 ? (
+        <Card className="p-8 text-center">
+          <Users className="w-12 h-12 mx-auto text-gray-400 mb-4" />
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Users Found</h3>
+          <p className="text-gray-600">Users will appear here when they sign up for accounts.</p>
+        </Card>
       ) : (
-      
-      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {members.map((member) => (
-          <Card key={member.id} className="bg-white border-gray-300">
-            <CardContent className="p-6 text-center relative">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="absolute top-2 right-2">
-                    <MoreHorizontal className="w-4 h-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem>
-                    <Edit className="w-4 h-4 mr-2" />
-                    Edit Member
-                  </DropdownMenuItem>
-                  <DropdownMenuItem 
-                    className="text-red-600"
-                    onClick={() => member.id && handleDeleteMember(member.id, member.fullName)}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" />
-                    Remove Member
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              
-              <div className="w-16 h-16 bg-black rounded-full mx-auto mb-4 flex items-center justify-center">
-                <span className="text-[#f5f8f3] font-bold text-lg">
-                  {member.fullName.split(' ').map((n: string) => n[0]).join('').toUpperCase()}
-                </span>
-              </div>
-              <h3 className="font-semibold text-black">{member.fullName}</h3>
-              <p className="text-sm text-gray-600">{member.role}</p>
-              <p className="text-xs text-gray-500 mt-1">{member.email}</p>
-              <div className="flex justify-center gap-2 mt-3">
-                <Badge className={`${
-                  member.status === 'active' ? 'bg-green-100 text-green-800' :
-                  member.status === 'away' ? 'bg-yellow-100 text-yellow-800' :
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {users.map((user) => (
+            <Card key={user.id} className="bg-white border-gray-300 hover:shadow-lg transition-all duration-200 group">
+              <CardContent className="p-6 relative">
+                {/* Status indicator */}
+                <div className={`absolute top-3 left-3 flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                  user.status === 'active' ? 'bg-green-100 text-green-800' :
+                  user.status === 'away' ? 'bg-yellow-100 text-yellow-800' :
+                  user.status === 'busy' ? 'bg-red-100 text-red-800' :
                   'bg-gray-100 text-gray-800'
                 }`}>
-                  {member.status === 'active' ? 'Active' : 
-                   member.status === 'away' ? 'Away' : 'Offline'}
-                </Badge>
-                <Badge className={`${
-                  member.permissions === 'admin' ? 'bg-blue-100 text-blue-800' :
-                  member.permissions === 'manager' ? 'bg-purple-100 text-purple-800' :
-                  member.permissions === 'lead' ? 'bg-blue-100 text-blue-800' :
-                  'bg-gray-100 text-gray-800'
-                }`}>
-                  {member.permissions.charAt(0).toUpperCase() + member.permissions.slice(1)}
-                </Badge>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">Department: {member.department}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+                  {getStatusIcon(user.status)}
+                  <span className="capitalize">{user.status}</span>
+                </div>
+
+                {/* Action menu */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <MoreHorizontal className="w-4 h-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleUpdateUserStatus(user.id, 'active')}>
+                      <UserCheck className="w-4 h-4 mr-2 text-green-600" />
+                      Set Active
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleUpdateUserStatus(user.id, 'away')}>
+                      <Clock className="w-4 h-4 mr-2 text-yellow-600" />
+                      Set Away
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleUpdateUserStatus(user.id, 'busy')}>
+                      <AlertCircle className="w-4 h-4 mr-2 text-red-600" />
+                      Set Busy
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleUpdateUserStatus(user.id, 'inactive')}>
+                      <UserX className="w-4 h-4 mr-2 text-gray-600" />
+                      Set Inactive
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
+                {/* Avatar with status ring */}
+                <div className="text-center mt-4">
+                  <div className={`relative w-16 h-16 mx-auto mb-4 ${
+                    user.status === 'active' ? 'ring-2 ring-green-500 ring-offset-2' :
+                    user.status === 'away' ? 'ring-2 ring-yellow-500 ring-offset-2' :
+                    user.status === 'busy' ? 'ring-2 ring-red-500 ring-offset-2' :
+                    'ring-1 ring-gray-300 ring-offset-2'
+                  } rounded-full transition-all duration-200`}>
+                    <Avatar className="w-full h-full">
+                      <AvatarImage src={user.profileImage} />
+                      <AvatarFallback className="bg-gradient-to-br from-gray-700 to-black text-white font-bold text-lg">
+                        {getInitials(user.name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    {user.status === 'active' && (
+                      <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 border-2 border-white rounded-full"></div>
+                    )}
+                  </div>
+                  
+                  <h3 className="font-semibold text-gray-900 text-lg">{getUserDisplayName(user)}</h3>
+                  <p className="text-gray-600 font-medium">{getRoleDisplayName(user.role)}</p>
+                  <p className="text-gray-500 text-sm">{user.email}</p>
+                  
+                  {/* Role badge */}
+                  <div className="mt-3 mb-4">
+                    <Badge className={`${
+                      user.role === 'admin' ? 'bg-purple-100 text-purple-800 border-purple-200' :
+                      user.role === 'project_manager' ? 'bg-blue-100 text-blue-800 border-blue-200' :
+                      user.role === 'team_lead' ? 'bg-indigo-100 text-indigo-800 border-indigo-200' :
+                      user.role === 'developer' ? 'bg-green-100 text-green-800 border-green-200' :
+                      user.role === 'designer' ? 'bg-pink-100 text-pink-800 border-pink-200' :
+                      user.role === 'analyst' ? 'bg-orange-100 text-orange-800 border-orange-200' :
+                      'bg-gray-100 text-gray-800 border-gray-200'
+                    } flex items-center gap-1 w-fit mx-auto`}>
+                      {getRoleIcon(user.role)}
+                      {getRoleDisplayName(user.role)}
+                    </Badge>
+                  </div>
+
+                  {/* Department */}
+                  {user.department && (
+                    <div className="mb-4">
+                      <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                        <Building className="w-3 h-3" />
+                        {user.department}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Task and Project counts */}
+                  <div className="grid grid-cols-2 gap-2 mb-4">
+                    <div className="text-center p-2 bg-gray-50 rounded">
+                      <p className="text-xs text-gray-500">Tasks</p>
+                      <p className="font-semibold text-gray-900">{user.assignedTasks.length}</p>
+                    </div>
+                    <div className="text-center p-2 bg-gray-50 rounded">
+                      <p className="text-xs text-gray-500">Projects</p>
+                      <p className="font-semibold text-gray-900">{user.assignedProjects.length}</p>
+                    </div>
+                  </div>
+
+                  {/* Permissions Preview */}
+                  <div className="mb-4">
+                    <p className="text-xs text-gray-500 mb-2">Key Permissions:</p>
+                    <div className="flex flex-wrap gap-1 justify-center">
+                      {user.permissions.canCreateProjects && (
+                        <Badge variant="secondary" className="text-xs">Create Projects</Badge>
+                      )}
+                      {user.permissions.canAssignTasks && (
+                        <Badge variant="secondary" className="text-xs">Assign Tasks</Badge>
+                      )}
+                      {user.permissions.canManageUsers && (
+                        <Badge variant="secondary" className="text-xs">Manage Users</Badge>
+                      )}
+                      {user.permissions.canViewReports && (
+                        <Badge variant="secondary" className="text-xs">View Reports</Badge>
+                      )}
+                      {user.permissions.canManageBudget && (
+                        <Badge variant="secondary" className="text-xs">Manage Budget</Badge>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Last active */}
+                  <div className="pt-4 border-t border-gray-100">
+                    <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      Last active: {formatLastActive(user.lastActive)}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       )}
 
-      {/* Team Stats */}
-      <div className="grid md:grid-cols-4 gap-4">
-        <Card className="bg-white border-gray-300">
-          <CardContent className="p-4 text-center">
-            <h4 className="text-2xl font-bold text-black">{members.length}</h4>
-            <p className="text-sm text-gray-600">Total Members</p>
+      {/* Enhanced Team Stats */}
+      <div className="grid md:grid-cols-4 gap-6">
+        <Card className="bg-gradient-to-br from-green-50 to-emerald-50 border-green-200">
+          <CardContent className="p-6 text-center">
+            <div className="flex items-center justify-center mb-2">
+              <UserCheck className="w-8 h-8 text-green-600" />
+            </div>
+            <h4 className="text-3xl font-bold text-green-600">{activeUsers.length}</h4>
+            <p className="text-sm text-green-700 font-medium">Active Now</p>
+            <p className="text-xs text-green-600 mt-1">Real-time active</p>
           </CardContent>
         </Card>
-        <Card className="bg-white border-gray-300">
-          <CardContent className="p-4 text-center">
-            <h4 className="text-2xl font-bold text-green-600">
-              {members.filter(m => m.status === 'active').length}
-            </h4>
-            <p className="text-sm text-gray-600">Active Now</p>
+        
+        <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200">
+          <CardContent className="p-6 text-center">
+            <div className="flex items-center justify-center mb-2">
+              <Users className="w-8 h-8 text-blue-600" />
+            </div>
+            <h4 className="text-3xl font-bold text-blue-600">{users.length}</h4>
+            <p className="text-sm text-blue-700 font-medium">Total Users</p>
+            <p className="text-xs text-blue-600 mt-1">All registered users</p>
           </CardContent>
         </Card>
-        <Card className="bg-white border-gray-300">
-          <CardContent className="p-4 text-center">
-            <h4 className="text-2xl font-bold text-blue-600">
-              {new Set(members.map(m => m.department)).size}
+        
+        <Card className="bg-gradient-to-br from-purple-50 to-indigo-50 border-purple-200">
+          <CardContent className="p-6 text-center">
+            <div className="flex items-center justify-center mb-2">
+              <Shield className="w-8 h-8 text-purple-600" />
+            </div>
+            <h4 className="text-3xl font-bold text-purple-600">
+              {users.filter(u => u.role === 'admin' || u.role === 'project_manager').length}
             </h4>
-            <p className="text-sm text-gray-600">Departments</p>
+            <p className="text-sm text-purple-700 font-medium">Leadership</p>
+            <p className="text-xs text-purple-600 mt-1">Admins & Managers</p>
           </CardContent>
         </Card>
-        <Card className="bg-white border-gray-300">
-          <CardContent className="p-4 text-center">
-            <h4 className="text-2xl font-bold text-purple-600">
-              {members.filter(m => m.permissions === 'admin' || m.permissions === 'manager').length}
+        
+        <Card className="bg-gradient-to-br from-orange-50 to-yellow-50 border-orange-200">
+          <CardContent className="p-6 text-center">
+            <div className="flex items-center justify-center mb-2">
+              <School className="w-8 h-8 text-orange-600" />
+            </div>
+            <h4 className="text-3xl font-bold text-orange-600">
+              {new Set(users.filter(u => u.department).map(u => u.department)).size}
             </h4>
-            <p className="text-sm text-gray-600">Leaders</p>
+            <p className="text-sm text-orange-700 font-medium">Departments</p>
+            <p className="text-xs text-orange-600 mt-1">Active departments</p>
           </CardContent>
         </Card>
       </div>
@@ -1313,7 +1485,7 @@ function TasksContent({ tasks }: { tasks: Task[] }) {
             <Button className="bg-black hover:bg-gray-800 text-[#f5f8f3]">
               <Plus className="w-4 h-4 mr-2" />
               Create New Task
-            </Button>
+        </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
@@ -1337,7 +1509,7 @@ function TasksContent({ tasks }: { tasks: Task[] }) {
                     required
                     disabled={isCreatingTask}
                   />
-                </div>
+      </div>
                 <div className="md:col-span-2">
                   <Label htmlFor="taskDescription">Description</Label>
                   <Textarea
@@ -1349,8 +1521,8 @@ function TasksContent({ tasks }: { tasks: Task[] }) {
                     required
                     disabled={isCreatingTask}
                   />
-                </div>
-                <div>
+    </div>
+        <div>
                   <Label htmlFor="assignedTo">Assigned To</Label>
                   <Input
                     id="assignedTo"
@@ -1360,7 +1532,7 @@ function TasksContent({ tasks }: { tasks: Task[] }) {
                     required
                     disabled={isCreatingTask}
                   />
-                </div>
+        </div>
                 <div>
                   <Label htmlFor="assignedEmail">Email</Label>
                   <Input
@@ -1422,8 +1594,8 @@ function TasksContent({ tasks }: { tasks: Task[] }) {
                   disabled={isCreatingTask}
                 >
                   Cancel
-                </Button>
-              </div>
+        </Button>
+      </div>
             </form>
           </DialogContent>
         </Dialog>
@@ -1671,10 +1843,10 @@ function FinancesContent({ donations, expenses }: { donations: Donation[]; expen
           {/* Add Expense Dialog */}
           <Dialog open={showExpenseForm} onOpenChange={setShowExpenseForm}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="h-12 px-6 border-2 bg-transparent">
+          <Button variant="outline" className="h-12 px-6 border-2 bg-transparent">
                 <Receipt className="w-5 h-5 mr-2" />
-                Add Expense
-              </Button>
+            Add Expense
+          </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
@@ -1797,10 +1969,10 @@ function FinancesContent({ donations, expenses }: { donations: Donation[]; expen
           {/* Add Donation Dialog */}
           <Dialog open={showDonationForm} onOpenChange={setShowDonationForm}>
             <DialogTrigger asChild>
-              <Button className="bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-12 px-6">
+          <Button className="bg-gradient-to-r from-emerald-600 to-blue-600 hover:from-emerald-700 hover:to-blue-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 h-12 px-6">
                 <CreditCard className="w-5 h-5 mr-2" />
-                Add Donation
-              </Button>
+            Add Donation
+          </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
               <DialogHeader>
@@ -1824,7 +1996,7 @@ function FinancesContent({ donations, expenses }: { donations: Donation[]; expen
                       required
                       disabled={isAddingDonation}
                     />
-                  </div>
+        </div>
                   <div>
                     <Label htmlFor="donorEmail">Email (Optional)</Label>
                     <Input
@@ -1835,7 +2007,7 @@ function FinancesContent({ donations, expenses }: { donations: Donation[]; expen
                       placeholder="donor@example.com"
                       disabled={isAddingDonation}
                     />
-                  </div>
+      </div>
                   <div>
                     <Label htmlFor="donationAmount">Amount (PKR)</Label>
                     <Input
