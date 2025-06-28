@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // DEVELOPMENT ONLY - Allow all operations for testing
+    // This will fix your permission errors immediately
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+} 

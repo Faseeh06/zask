@@ -8,220 +8,239 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Heart, Eye, EyeOff, Mail, Lock, User, Globe } from "lucide-react"
+import { CheckSquare, Eye, EyeOff, Mail, Lock, User, Loader2 } from "lucide-react"
+import { signUp, signInWithGoogle } from "@/lib/auth"
+import { toast } from "sonner"
 
 interface SignupPageProps {
-  onSignup: () => void
+  onSignup: (username: string) => void
   onSwitchToLogin: () => void
 }
 
 export default function SignupPage({ onSignup, onSwitchToLogin }: SignupPageProps) {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    password: "",
-    confirmPassword: "",
-    role: "",
-    country: "",
-    agreeToTerms: false,
-  })
+  const [fullName, setFullName] = useState("")
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [agreeTerms, setAgreeTerms] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Simulate signup
-    onSignup()
+    
+    // Basic validation
+    if (password !== confirmPassword) {
+      toast.error("Passwords don't match")
+      return
+    }
+    
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters long")
+      return
+    }
+    
+    if (!agreeTerms) {
+      toast.error("Please agree to the terms and conditions")
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const { user, error } = await signUp(email, password)
+      
+      if (error) {
+        toast.error(error)
+        setIsLoading(false)
+        return
+      }
+
+      if (user) {
+        // Use full name as display name, or extract from email
+        const username = fullName || email.split('@')[0] || email
+        
+        // Store user info in localStorage
+        localStorage.setItem('zask_user', username)
+        
+        toast.success('Account created successfully!')
+        onSignup(username)
+      }
+    } catch (error) {
+      toast.error('Signup failed. Please try again.')
+      console.error('Signup error:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleInputChange = (field: string, value: string | boolean) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
+  const handleGoogleSignUp = async () => {
+    setIsLoading(true)
+    try {
+      const { user, error } = await signInWithGoogle()
+      
+      if (error) {
+        toast.error(error)
+        setIsLoading(false)
+        return
+      }
+
+      if (user) {
+        const username = user.displayName || user.email?.split('@')[0] || 'User'
+        localStorage.setItem('zask_user', username)
+        toast.success('Google signup successful!')
+        onSignup(username)
+      }
+    } catch (error) {
+      toast.error('Google signup failed. Please try again.')
+      console.error('Google signup error:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-emerald-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-lg">
+    <div className="min-h-screen bg-[#f5f8f3] flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
         {/* Logo and Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-blue-600 to-emerald-600 rounded-2xl shadow-lg mb-4">
-            <Heart className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-black rounded-2xl shadow-lg mb-4">
+            <CheckSquare className="w-8 h-8 text-[#f5f8f3]" />
           </div>
-          <h1 className="text-5xl font-bold text-gray-900 mb-2 font-ephesis">Join Project Shaoor</h1>
-          <p className="text-gray-600 text-lg font-poiret-one">Start making a difference today</p>
+          <h1 className="text-5xl font-bold text-black mb-2 font-ephesis">Zask</h1>
+          <p className="text-gray-800 text-lg font-poiret-one">Smart Task Management Platform</p>
         </div>
 
         {/* Signup Card */}
-        <Card className="shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
+        <Card className="shadow-2xl border-0 bg-white/90 backdrop-blur-sm">
           <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-4xl font-bold text-center text-gray-900 font-ephesis">Create Account</CardTitle>
-            <CardDescription className="text-center text-gray-600 text-base font-poiret-one">
-              Join our community of volunteers and coordinators
+            <CardTitle className="text-4xl font-bold text-center text-black font-ephesis">Create Account</CardTitle>
+            <CardDescription className="text-center text-gray-700 text-base font-poiret-one">
+              Join Zask and start managing your projects efficiently
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Name Fields */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="firstName" className="text-sm font-medium text-gray-700">
-                    First Name
-                  </Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                    <Input
-                      id="firstName"
-                      type="text"
-                      placeholder="First name"
-                      value={formData.firstName}
-                      onChange={(e) => handleInputChange("firstName", e.target.value)}
-                      className="pl-10 h-12 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="lastName" className="text-sm font-medium text-gray-700">
-                    Last Name
-                  </Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                    <Input
-                      id="lastName"
-                      type="text"
-                      placeholder="Last name"
-                      value={formData.lastName}
-                      onChange={(e) => handleInputChange("lastName", e.target.value)}
-                      className="pl-10 h-12 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
+              {/* Full Name Field */}
+              <div className="space-y-2">
+                <Label htmlFor="fullName" className="text-sm font-medium text-gray-800">
+                  Full Name
+                </Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
+                  <Input
+                    id="fullName"
+                    type="text"
+                    placeholder="Enter your full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="pl-10 h-12 border-gray-300 focus:border-black focus:ring-black text-base"
+                    required
+                    disabled={isLoading}
+                  />
                 </div>
               </div>
 
               {/* Email Field */}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="email" className="text-sm font-medium text-gray-800">
                   Email Address
                 </Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="Enter your email"
-                    value={formData.email}
-                    onChange={(e) => handleInputChange("email", e.target.value)}
-                    className="pl-10 h-12 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10 h-12 border-gray-300 focus:border-black focus:ring-black text-base"
                     required
+                    disabled={isLoading}
                   />
                 </div>
               </div>
 
-              {/* Role and Country */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="role" className="text-sm font-medium text-gray-700">
-                    I want to be a
-                  </Label>
-                  <Select value={formData.role} onValueChange={(value) => handleInputChange("role", value)}>
-                    <SelectTrigger className="h-12 border-gray-200 focus:border-blue-500 focus:ring-blue-500">
-                      <SelectValue placeholder="Select role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="volunteer">Volunteer</SelectItem>
-                      <SelectItem value="coordinator">Coordinator</SelectItem>
-                      <SelectItem value="donor">Donor</SelectItem>
-                      <SelectItem value="institution">Institution Representative</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="country" className="text-sm font-medium text-gray-700">
-                    Country
-                  </Label>
-                  <div className="relative">
-                    <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                    <Input
-                      id="country"
-                      type="text"
-                      placeholder="Your country"
-                      value={formData.country}
-                      onChange={(e) => handleInputChange("country", e.target.value)}
-                      className="pl-10 h-12 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Password Fields */}
+              {/* Password Field */}
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="password" className="text-sm font-medium text-gray-800">
                   Password
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    placeholder="Create a password"
-                    value={formData.password}
-                    onChange={(e) => handleInputChange("password", e.target.value)}
-                    className="pl-10 pr-10 h-12 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    placeholder="Create a password (min 6 characters)"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10 pr-10 h-12 border-gray-300 focus:border-black focus:ring-black text-base"
                     required
+                    disabled={isLoading}
+                    minLength={6}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    disabled={isLoading}
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
               </div>
 
+              {/* Confirm Password Field */}
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="confirmPassword" className="text-sm font-medium text-gray-800">
                   Confirm Password
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
                   <Input
                     id="confirmPassword"
                     type={showConfirmPassword ? "text" : "password"}
                     placeholder="Confirm your password"
-                    value={formData.confirmPassword}
-                    onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
-                    className="pl-10 pr-10 h-12 border-gray-200 focus:border-blue-500 focus:ring-blue-500"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="pl-10 pr-10 h-12 border-gray-300 focus:border-black focus:ring-black text-base"
                     required
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    disabled={isLoading}
                   >
                     {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                {/* Password Match Indicator */}
+                {confirmPassword && (
+                  <p className={`text-xs ${password === confirmPassword ? 'text-green-600' : 'text-red-600'}`}>
+                    {password === confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
+                  </p>
+                )}
               </div>
 
-              {/* Terms Agreement */}
-              <div className="flex items-start space-x-3">
+              {/* Terms and Conditions */}
+              <div className="flex items-start space-x-2">
                 <Checkbox
                   id="terms"
-                  checked={formData.agreeToTerms}
-                  onCheckedChange={(checked) => handleInputChange("agreeToTerms", checked as boolean)}
+                  checked={agreeTerms}
+                  onCheckedChange={(checked) => setAgreeTerms(checked as boolean)}
                   className="mt-1"
+                  disabled={isLoading}
                 />
-                <Label htmlFor="terms" className="text-sm text-gray-600 leading-relaxed">
+                <Label htmlFor="terms" className="text-sm text-gray-700 leading-relaxed">
                   I agree to the{" "}
-                  <Button variant="link" className="text-blue-600 hover:text-blue-700 p-0 h-auto font-medium">
+                  <Button variant="link" className="text-black hover:text-gray-700 p-0 h-auto" disabled={isLoading}>
                     Terms of Service
                   </Button>{" "}
                   and{" "}
-                  <Button variant="link" className="text-blue-600 hover:text-blue-700 p-0 h-auto font-medium">
+                  <Button variant="link" className="text-black hover:text-gray-700 p-0 h-auto" disabled={isLoading}>
                     Privacy Policy
                   </Button>
                 </Label>
@@ -230,26 +249,38 @@ export default function SignupPage({ onSignup, onSwitchToLogin }: SignupPageProp
               {/* Signup Button */}
               <Button
                 type="submit"
-                disabled={!formData.agreeToTerms}
-                className="w-full h-12 bg-gradient-to-r from-blue-600 to-emerald-600 hover:from-blue-700 hover:to-emerald-700 text-white font-medium text-base shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-12 bg-black hover:bg-gray-800 text-[#f5f8f3] font-medium text-base shadow-lg hover:shadow-xl transition-all duration-200"
+                disabled={isLoading}
               >
-                Create Account
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Creating Account...
+                  </>
+                ) : (
+                  'Create Account'
+                )}
               </Button>
             </form>
 
             {/* Divider */}
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-gray-200" />
+                <span className="w-full border-t border-gray-300" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-500">Or sign up with</span>
+                <span className="px-4 bg-white text-gray-600">Or sign up with</span>
               </div>
             </div>
 
             {/* Social Signup */}
             <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" className="h-12 border-gray-200 hover:bg-gray-50 bg-transparent">
+              <Button 
+                variant="outline" 
+                className="h-12 border-gray-300 hover:bg-[#f5f8f3] bg-transparent" 
+                disabled={isLoading}
+                onClick={handleGoogleSignUp}
+              >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                   <path
                     fill="currentColor"
@@ -270,7 +301,7 @@ export default function SignupPage({ onSignup, onSwitchToLogin }: SignupPageProp
                 </svg>
                 Google
               </Button>
-              <Button variant="outline" className="h-12 border-gray-200 hover:bg-gray-50 bg-transparent">
+              <Button variant="outline" className="h-12 border-gray-300 hover:bg-[#f5f8f3] bg-transparent" disabled={isLoading}>
                 <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                 </svg>
@@ -280,11 +311,12 @@ export default function SignupPage({ onSignup, onSwitchToLogin }: SignupPageProp
 
             {/* Login Link */}
             <div className="text-center">
-              <span className="text-gray-600">Already have an account? </span>
+              <span className="text-gray-700">Already have an account? </span>
               <Button
                 variant="link"
                 onClick={onSwitchToLogin}
-                className="text-blue-600 hover:text-blue-700 font-medium p-0"
+                className="text-black hover:text-gray-700 font-medium p-0"
+                disabled={isLoading}
               >
                 Sign in here
               </Button>
@@ -293,8 +325,8 @@ export default function SignupPage({ onSignup, onSwitchToLogin }: SignupPageProp
         </Card>
 
         {/* Footer */}
-        <div className="text-center mt-8 text-gray-500 text-sm font-poiret-one">
-          <p>© 2024 Project Shaoor. Making education accessible worldwide.</p>
+        <div className="text-center mt-8 text-gray-600 text-sm font-poiret-one">
+          <p>© 2024 Zask. Streamlining project management worldwide.</p>
         </div>
       </div>
     </div>

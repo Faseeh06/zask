@@ -8,10 +8,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Heart, Eye, EyeOff, Mail, Lock } from "lucide-react"
+import { CheckSquare, Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react"
+import { signIn, signInWithGoogle } from "@/lib/auth"
+import { toast } from "sonner"
 
 interface LoginPageProps {
-  onLogin: () => void
+  onLogin: (username: string) => void
   onSwitchToSignup: () => void
 }
 
@@ -20,74 +22,131 @@ export default function LoginPage({ onLogin, onSwitchToSignup }: LoginPageProps)
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [rememberMe, setRememberMe] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Simulate login
-    onLogin()
+    setIsLoading(true)
+
+    try {
+      const { user, error } = await signIn(email, password)
+      
+      if (error) {
+        toast.error(error)
+        setIsLoading(false)
+        return
+      }
+
+      if (user) {
+        // Extract username from email for display
+        const username = user.displayName || email.split('@')[0] || email
+        
+        // Store user info in localStorage if remember me is checked
+        if (rememberMe) {
+          localStorage.setItem('zask_user', username)
+          localStorage.setItem('zask_remember', 'true')
+        }
+        
+        toast.success('Login successful!')
+        onLogin(username)
+      }
+    } catch (error) {
+      toast.error('Login failed. Please try again.')
+      console.error('Login error:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleGoogleSignIn = async () => {
+    setIsLoading(true)
+    try {
+      const { user, error } = await signInWithGoogle()
+      
+      if (error) {
+        toast.error(error)
+        setIsLoading(false)
+        return
+      }
+
+      if (user) {
+        const username = user.displayName || user.email?.split('@')[0] || 'User'
+        localStorage.setItem('zask_user', username)
+        toast.success('Google login successful!')
+        onLogin(username)
+      }
+    } catch (error) {
+      toast.error('Google login failed. Please try again.')
+      console.error('Google login error:', error)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-blue-50 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-[#f5f8f3] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo and Brand */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-emerald-600 to-emerald-700 rounded-2xl shadow-lg mb-4">
-            <Heart className="w-8 h-8 text-white" />
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-black rounded-2xl shadow-lg mb-4">
+            <CheckSquare className="w-8 h-8 text-[#f5f8f3]" />
           </div>
-          <h1 className="text-5xl font-bold text-gray-900 mb-2 font-ephesis">Project Shaoor</h1>
-          <p className="text-gray-600 text-lg font-poiret-one">Connecting Hearts, Changing Lives</p>
+          <h1 className="text-5xl font-bold text-black mb-2 font-ephesis">Zask</h1>
+          <p className="text-gray-800 text-lg font-poiret-one">Smart Task Management Platform</p>
         </div>
 
         {/* Login Card */}
-        <Card className="shadow-2xl border-0 bg-white/80 backdrop-blur-sm">
+        <Card className="shadow-2xl border-0 bg-white/90 backdrop-blur-sm">
           <CardHeader className="space-y-1 pb-6">
-            <CardTitle className="text-4xl font-bold text-center text-gray-900 font-ephesis">Welcome Back</CardTitle>
-            <CardDescription className="text-center text-gray-600 text-base font-poiret-one">
-              Sign in to your account to continue making a difference
+            <CardTitle className="text-4xl font-bold text-center text-black font-ephesis">Welcome Back</CardTitle>
+            <CardDescription className="text-center text-gray-700 text-base font-poiret-one">
+              Sign in to your account to access your projects
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <form onSubmit={handleSubmit} className="space-y-5">
               {/* Email Field */}
               <div className="space-y-2">
-                <Label htmlFor="email" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="email" className="text-sm font-medium text-gray-800">
                   Email Address
                 </Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
                   <Input
                     id="email"
                     type="email"
                     placeholder="Enter your email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 h-12 border-gray-200 focus:border-emerald-500 focus:ring-emerald-500 text-base"
+                    className="pl-10 h-12 border-gray-300 focus:border-black focus:ring-black text-base"
                     required
+                    disabled={isLoading}
                   />
                 </div>
               </div>
 
               {/* Password Field */}
               <div className="space-y-2">
-                <Label htmlFor="password" className="text-sm font-medium text-gray-700">
+                <Label htmlFor="password" className="text-sm font-medium text-gray-800">
                   Password
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
                     placeholder="Enter your password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10 h-12 border-gray-200 focus:border-emerald-500 focus:ring-emerald-500 text-base"
+                    className="pl-10 pr-10 h-12 border-gray-300 focus:border-black focus:ring-black text-base"
                     required
+                    disabled={isLoading}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                    disabled={isLoading}
                   >
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
@@ -101,12 +160,13 @@ export default function LoginPage({ onLogin, onSwitchToSignup }: LoginPageProps)
                     id="remember"
                     checked={rememberMe}
                     onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                    disabled={isLoading}
                   />
-                  <Label htmlFor="remember" className="text-sm text-gray-600">
+                  <Label htmlFor="remember" className="text-sm text-gray-700">
                     Remember me
                   </Label>
                 </div>
-                <Button variant="link" className="text-sm text-emerald-600 hover:text-emerald-700 p-0">
+                <Button variant="link" className="text-sm text-black hover:text-gray-700 p-0" disabled={isLoading}>
                   Forgot password?
                 </Button>
               </div>
@@ -114,25 +174,38 @@ export default function LoginPage({ onLogin, onSwitchToSignup }: LoginPageProps)
               {/* Login Button */}
               <Button
                 type="submit"
-                className="w-full h-12 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-medium text-base shadow-lg hover:shadow-xl transition-all duration-200"
+                className="w-full h-12 bg-black hover:bg-gray-800 text-[#f5f8f3] font-medium text-base shadow-lg hover:shadow-xl transition-all duration-200"
+                disabled={isLoading}
               >
-                Sign In
+                {isLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Signing In...
+                  </>
+                ) : (
+                  'Sign In'
+                )}
               </Button>
             </form>
 
             {/* Divider */}
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-gray-200" />
+                <span className="w-full border-t border-gray-300" />
               </div>
               <div className="relative flex justify-center text-sm">
-                <span className="px-4 bg-white text-gray-500">Or continue with</span>
+                <span className="px-4 bg-white text-gray-600">Or continue with</span>
               </div>
             </div>
 
             {/* Social Login */}
             <div className="grid grid-cols-2 gap-3">
-              <Button variant="outline" className="h-12 border-gray-200 hover:bg-gray-50 bg-transparent">
+              <Button 
+                variant="outline" 
+                className="h-12 border-gray-300 hover:bg-[#f5f8f3] bg-transparent" 
+                disabled={isLoading}
+                onClick={handleGoogleSignIn}
+              >
                 <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                   <path
                     fill="currentColor"
@@ -153,7 +226,7 @@ export default function LoginPage({ onLogin, onSwitchToSignup }: LoginPageProps)
                 </svg>
                 Google
               </Button>
-              <Button variant="outline" className="h-12 border-gray-200 hover:bg-gray-50 bg-transparent">
+              <Button variant="outline" className="h-12 border-gray-300 hover:bg-[#f5f8f3] bg-transparent" disabled={isLoading}>
                 <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
                 </svg>
@@ -163,11 +236,12 @@ export default function LoginPage({ onLogin, onSwitchToSignup }: LoginPageProps)
 
             {/* Sign Up Link */}
             <div className="text-center">
-              <span className="text-gray-600">{"Don't have an account? "}</span>
+              <span className="text-gray-700">{"Don't have an account? "}</span>
               <Button
                 variant="link"
                 onClick={onSwitchToSignup}
-                className="text-emerald-600 hover:text-emerald-700 font-medium p-0"
+                className="text-black hover:text-gray-700 font-medium p-0"
+                disabled={isLoading}
               >
                 Sign up here
               </Button>
@@ -176,8 +250,8 @@ export default function LoginPage({ onLogin, onSwitchToSignup }: LoginPageProps)
         </Card>
 
         {/* Footer */}
-        <div className="text-center mt-8 text-gray-500 text-sm font-poiret-one">
-          <p>© 2024 Project Shaoor. Making education accessible worldwide.</p>
+        <div className="text-center mt-8 text-gray-600 text-sm font-poiret-one">
+          <p>© 2024 Zask. Streamlining project management worldwide.</p>
         </div>
       </div>
     </div>

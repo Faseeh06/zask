@@ -18,8 +18,8 @@ const ephesis = Ephesis({
 })
 
 export const metadata: Metadata = {
-  title: "Project Shaoor - Connecting Hearts, Changing Lives",
-  description: "A platform connecting orphanages and schools with volunteers for virtual teaching",
+  title: "Zask - Smart Task Management Platform",
+  description: "A collaborative project management platform for teams and organizations",
     generator: 'v0.dev'
 }
 
